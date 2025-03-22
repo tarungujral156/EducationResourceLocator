@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Interactive Educational & Community Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    #map { height: 500px; width: 100%; }
+  </style>
+</head>
+<body>
+  <h1>Interactive Map</h1>
+  <p>Click on the map to place your location marker. Nearby locations for different categories will be displayed with distinct icons.</p>
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  
+  <script>
+    // Initialize the map centered on a default location (New York City)
+    var map = L.map('map').setView([40.7128, -74.0060], 13);
+
+    // Load OpenStreetMap tiles.
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Global variable to store the single user marker.
+    var userMarker = null;
+    // Layer group for retrieved markers.
+    var resultsLayer = L.layerGroup().addTo(map);
+
+    // Define custom icons for different categories.
+    // Replace the iconUrl with your own image URL or use a free icon resource.
+    var icons = {
+      library: L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/2965/2965567.png',
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+        popupAnchor: [0, -30]
+      }),
+      school: L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/167/167707.png',
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+        popupAnchor: [0, -30]
+      }),
+      college: L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/1048/1048950.png',
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+        popupAnchor: [0, -30]
+      }),
+      university: L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/2965/2965570.png',
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+        popupAnchor: [0, -30]
+      }),
+      event: L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/2922/2922510.png',
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+        popupAnchor: [0, -30]
+      }),
+      workshop: L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/226/226777.png',
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+        popupAnchor: [0, -30]
+      }),
+    };
+
+    // Function to add a marker with the appropriate icon.
+    function addResultMarker(lat, lng, name, category) {
+      var chosenIcon = icons[category] || null;
+      var marker = L.marker([lat, lng], { icon: chosenIcon }).addTo(resultsLayer);
+      marker.bindPopup("<b>" + name + "</b><br>Category: " + category);
+    }
+
+    // Function to query the Overpass API for multiple categories.
+    function searchNearby(lat, lng) {
+      // Clear previous results.
+      resultsLayer.clearLayers();
+
+      // Overpass QL query for multiple categories within a 10 km radius.
+      var query = `
+        [out:json][timeout:25];
+        (
+          node["amenity"="library"](around:10000,${lat},${lng});
+          node["amenity"="school"](around:10000,${lat},${lng});
+          node["amenity"="college"](around:10000,${lat},${lng});
+          node["amenity"="university"](around:10000,${lat},${lng});
+          node["amenity"="theatre"](around:10000,${lat},${lng});       // using theatre as event placeholder
+          node["amenity"="community_centre"](around:10000,${lat},${lng}); // using community centre as workshop placeholder
+        );
+        out body;
+      `;
+
+      fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        body: query,
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.elements) {
+          data.elements.forEach(function(element) {
+            if (element.lat && element.lon) {
+              // Determine the category based on the amenity tag.
+              var amenity = element.tags && element.tags.amenity ? element.tags.amenity : "unknown";
+              var category = "";
+              switch(amenity) {
+                case "library":
+                  category = "library";
+                  break;
+                case "school":
+                  category = "school";
+                  break;
+                case "college":
+                  category = "college";
+                  break;
+                case "university":
+                  category = "university";
+                  break;
+                case "theatre":
+                  category = "event";
+                  break;
+                case "community_centre":
+                  category = "workshop";
+                  break;
+                default:
+                  category = "unknown";
+              }
+              var name = (element.tags && element.tags.name) ? element.tags.name : "Unnamed";
+              addResultMarker(element.lat, element.lon, name, category);
+            }
+          });
+        }
+      })
+      .catch(err => console.error("Overpass API error:", err));
+    }
+
+    // Add a click event on the map.
+    map.on('click', function(e) {
+      // Remove the previous user marker if it exists.
+      if (userMarker) {
+        map.removeLayer(userMarker);
+      }
+      // Add new user marker.
+      userMarker = L.marker(e.latlng, { draggable: false }).addTo(map);
+      userMarker.bindPopup("Your location").openPopup();
+
+      // Query for nearby educational and community places.
+      searchNearby(e.latlng.lat, e.latlng.lng);
+    });
+  </script>
+</body>
+</html>
